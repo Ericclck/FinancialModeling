@@ -102,7 +102,8 @@ def get_events(close : pd.DataFrame, sampling_indices : pd.Series , scalers_for_
     if len(target) >= len(sampling_indices):
         target = target.loc[sampling_indices]
     # min return
-    # print(f"Percentage not pass min_target : {len(target[target <= min_target])/len(target):.4f}")
+    if (target > min_target).sum()/len(target) < 0.7 or (target > min_target).sum()/len(target) > 0.99:
+        raise ValueError(f"Percentage passing min_target is {(target > min_target).sum()/len(target):.4f}, should be higher than 70% but smaller than 99%, min_target is too high, 30% quartile of target is {target.quantile(0.2):.4f} excluding NAN,but min_target is {min_target:.4f}, if quartile is larger, that implies there are too many nans or too many samples passing min_target.")
     target = target[target > min_target]
     # get vertical barriers
     if vertical_barriers is None:

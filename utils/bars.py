@@ -246,7 +246,7 @@ def get_run_dollar_bar(ticks : pd.Series, window : int, indices_only = False) ->
     run_bars = pd.DataFrame(run_bars, columns=['time','open','high','low','close','volume','id'])
     return run_bars
 
-def get_events(ticks : pd.Series, h : int) -> np.ndarray:
+def get_cusum_events(ticks : pd.Series, h : int) -> np.ndarray:
     """
     Get t events
 
@@ -271,15 +271,6 @@ def get_events(ticks : pd.Series, h : int) -> np.ndarray:
         elif sn <= -h:
             t_events[i] = True
             sn = 0
+    print("Number of samples percentage: ",sum(t_events)/len(ticks))
     return t_events
 
-def sampling(df,sampling_indices):
-    filtered_df = pd.DataFrame(index=df.iloc[sampling_indices].index)
-    for first,last in zip(filtered_df.index[:-1],filtered_df.index[1:]):
-        filtered_df.loc[last,'open'] = df.loc[first,'open']
-        # filtered_df.loc[last,'high'] = df.loc[first:last,'high'].max()
-        filtered_df.loc[last,'low'] = df.loc[first:last,'low'].min()
-        filtered_df.loc[last,'close'] = df.loc[last,'close']
-        # filtered_df.loc[last,'volume'] = df.loc[first:last,'volume'].sum()
-        # filtered_df.loc[last,'VWAP'] = ((df.loc[first:last,'close']*df.loc[first:last,'volume'])/df.loc[first:last,'volume'].sum()).sum()
-    return filtered_df

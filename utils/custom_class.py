@@ -2,55 +2,202 @@ import pandas as pd
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin,ClassifierMixin
 from utils.labeling import get_events,get_labels,ewma_std_pct_change
-from utils.bars import get_events as get_cusum_events
-from utils.bars import sampling
+from utils.bars import *
 from pandas import Timestamp, DateOffset
 from utils.sample_weights import *
+import copy
+from fracdiff.sklearn import Fracdiff, FracdiffStat
+MIN_NUM_SAMPLES = 100
 
-class ClassifierWrapper(BaseEstimator,ClassifierMixin):
-    def __init__(self,cusum_threshold,X_pipe,ptsl_scalers,model,min_target,ewma_window,primary_model,sample_weight,num_days_exit,sampling_dates=None) -> None:
-        self.cusum_threshold = cusum_threshold
-        self.X_pipe = X_pipe
+class ClassicSampler:
+    def __init__(self,cols=["open","high","low","close","volume","VWAP"],shuffle=None,verbose=0):
+        self.cols = cols
+        self.shuffle = shuffle
+        self.verbose = verbose
+    def sampling(self,df,sampling_indices):
+        filtered_df = pd.DataFrame(index=df.iloc[sampling_indices].index)
+        for first,last in zip(filtered_df.index[:-1],filtered_df.index[1:]):
+            if ("open" in self.cols):filtered_df.loc[last,'open'] = df.loc[first,'open']
+            if ("high" in self.cols):filtered_df.loc[last,'high'] = df.loc[first:last,'high'].max()
+            if ("low" in self.cols):filtered_df.loc[last,'low'] = df.loc[first:last,'low'].min()
+            if ("close" in self.cols):filtered_df.loc[last,'close'] = df.loc[last,'close']
+            if ("volume" in self.cols):filtered_df.loc[last,'volume'] = df.loc[first:last,'volume'].sum()
+            if ("VWAP" in self.cols):filtered_df.loc[last,'VWAP'] = ((df.loc[first:last,'close']*df.loc[first:last,'volume'])/df.loc[first:last,'volume'].sum()).sum()
+        # since the first sampling date doesn't have a sample , it should be dropped
+        filtered_df = filtered_df.iloc[1:]
+        if self.verbose > 0: print("Before shuffling: ",filtered_df)
+        # if shuffling is enabled
+        if (self.shuffle == "open"): filtered_df["open"] = np.random.permutation(filtered_df["open"].values)
+        if (self.shuffle == "high"): filtered_df["high"] = np.random.permutation(filtered_df["high"].values)
+        if (self.shuffle == "low"): filtered_df["low"] = np.random.permutation(filtered_df["low"].values)
+        if (self.shuffle == "close"): filtered_df["close"] = np.random.permutation(filtered_df["close"].values)
+        if (self.shuffle == "volume"): filtered_df["volume"] = np.random.permutation(filtered_df["volume"].values)
+        if (self.shuffle == "VWAP"): filtered_df["VWAP"] = np.random.permutation(filtered_df["VWAP"].values)
+        if self.verbose > 0: print("After shuffling: ",filtered_df)
+
+        self.sampling_cols = filtered_df.columns
+        return filtered_df
+    
+class EventSampler(ClassicSampler):
+    def __init__(self,cols=["close"],shuffle=None,verbose=0):
+        self.cols = cols
+        self.shuffle = shuffle
+        self.verbose = verbose
+    def sampling(self,df,sampling_indices):
+        filtered_df = pd.DataFrame(index=df.iloc[sampling_indices].index)
+        for first,last in zip(filtered_df.index[:-1],filtered_df.index[1:]):
+            if ("open" in self.cols):filtered_df.loc[last,'open'] = df.loc[first,'close']
+            if ("high" in self.cols):filtered_df.loc[last,'high'] = df.loc[first:last,'close'].max()
+            if ("low" in self.cols):filtered_df.loc[last,'low'] = df.loc[first:last,'close'].min()
+            if ("close" in self.cols):filtered_df.loc[last,'close'] = df.loc[last,'close']
+            if ("balance" in self.cols):filtered_df.loc[last,'balance_mean'] = df.loc[first:last,'balance'].mean()
+            if ("balance" in self.cols):filtered_df.loc[last,'balance_last'] = df.loc[first:last,'balance'].iloc[-1]
+            if ("net_flow" in self.cols):filtered_df.loc[last,'net_flow'] = df.loc[first:last,'net_flow'].sum()
+
+        # since the first sampling date doesn't have a sample , it should be dropped
+        filtered_df = filtered_df.fillna(method="bfill")
+        if self.verbose > 0: print("Before shuffling: ",filtered_df)
+        # if shuffling is enabled
+        if (self.shuffle == "open"): filtered_df["open"] = np.random.permutation(filtered_df["open"].values)
+        if (self.shuffle == "high"): filtered_df["high"] = np.random.permutation(filtered_df["high"].values)
+        if (self.shuffle == "low"): filtered_df["low"] = np.random.permutation(filtered_df["low"].values)
+        if (self.shuffle == "close"): filtered_df["close"] = np.random.permutation(filtered_df["close"].values)
+        if self.verbose > 0: print("After shuffling: ",filtered_df)
+
+        self.sampling_cols = filtered_df.columns
+        return filtered_df
+    
+class Labeler(BaseEstimator,TransformerMixin):
+    def __init__(self,ptsl_scalers:tuple[int,int],min_target:float,ewma_window:int,primary_model,num_days_exit:int) -> None:
         self.ptsl_scalers = ptsl_scalers
-        self.model = model
         self.min_target = min_target
         self.ewma_window = ewma_window
-        self.sampling_dates = sampling_dates
         self.primary_model = primary_model
-        self.sample_weight = sample_weight
         self.num_days_exit = num_days_exit
-        self.meta_labels = None
-        self.test_meta_labels = None
+
+    def label(self,close:pd.Series,sampling_indices:pd.Index):
+        ## Primary Labeling
+
+        # Triple Barrier
+
+        vertical_barriers = close.index.searchsorted(close[sampling_indices].index)+self.num_days_exit
+        vertical_barriers[vertical_barriers>len(close.index)-1] = len(close.index)-1
+        vertical_barriers = close.index[vertical_barriers]
+        vertical_barriers = pd.Series(vertical_barriers,index=close[sampling_indices].index)
+
+        self.target = pd.Series(ewma_std_pct_change(close.values,window=self.ewma_window),index=close.index)
+
+        vertical_barriers__target__first_touch = get_events(
+            close,
+            pd.Series(close[sampling_indices].index,index=close[sampling_indices].index),
+            self.ptsl_scalers,
+            self.target,
+            self.min_target,
+            None,
+            vertical_barriers,
+            )
+        return__labels = get_labels(vertical_barriers__target__first_touch,close)
+        # Primary Model
+        self.side = self.primary_model.predict(close,sampling_indices)
+        if len(self.side[self.side==1])/len(self.side) > 0.8 or len(self.side[self.side==1])/len(self.side) < 0.2:
+            Warning(f"Primary Model long percentage : {len(self.side[self.side==1])/len(self.side)}, This may be a bad model")
+        ## Meta-Labeling
+        vertical_barriers__target__first_touch = get_events(
+            close,
+            pd.Series(close[sampling_indices].index,index=close[sampling_indices].index),
+            self.ptsl_scalers,
+            self.target,
+            self.min_target,
+            None,
+            pd.Series(vertical_barriers,index=close[sampling_indices].index),
+            side=self.side
+            )
+        self.first_touch_time = vertical_barriers__target__first_touch['first_touch_index']
+        actual_returns__meta_labels = get_labels(vertical_barriers__target__first_touch,close)
+        self.meta_labels = actual_returns__meta_labels['meta_label']
+        self.actual_returns = actual_returns__meta_labels['return']
+        return self
+    
+class FeatureEngineer(BaseEstimator,TransformerMixin):
+    def __init__(self,sampler:EventSampler,X_pipe,shuffle_after_preprocessing_column_index:int=None,frac_stat:bool=False):
+        self.sampler = sampler
+        self.X_pipe = X_pipe
+        self.shuffle_after_preprocessing_column_index = shuffle_after_preprocessing_column_index
+        self.frac_stat = frac_stat
+    def engineer(self,df,y,sampling_indices):
+        sampled_df = self.sampler.sampling(df,sampling_indices).loc[y.index]
+        if (self.frac_stat):
+            fd = FracdiffStat()
+            fd.fit(sampled_df)
+            print(f"Fractional differentiation parameter : {fd.d_}")
+        X_preprocessed = self.X_pipe.fit_transform(sampled_df)
+        # To allow PCA MDA, which in turns is to prevent feature importance dilution
+        if self.shuffle_after_preprocessing_column_index:
+            X_preprocessed[:,self.shuffle_after_preprocessing_column_index] = np.random.permutation(X_preprocessed[:,self.shuffle_after_preprocessing_column_index])
+        return X_preprocessed
+    
+class Signaler(BaseEstimator,TransformerMixin):
+    def __init__(self) -> None:
+        pass
+    def get_event(self,close:pd.Series):
+        pass
+
+class CumulativeSumSignaler(Signaler):
+    def __init__(self,cusum_threshold:float,is_pct:bool,event_col:str="close") -> None:
+        self.cusum_threshold = cusum_threshold
+        self.is_pct = is_pct
+        self.event_col = event_col
+    def get_event(self,df:pd.DataFrame) -> np.ndarray:
+        event = df[self.event_col].copy(deep=True)
+        if self.is_pct:
+            event = event.pct_change().fillna(method="bfill")
+        t_events,sp,sn = np.zeros(len(event),dtype=np.bool),0,0
+        for i in range(1,len(event)):
+            sp , sn = max(0,sp+event.iloc[i]-event.iloc[i-1]),min(0,sn+event.iloc[i]-event.iloc[i-1])
+            if sp >= self.cusum_threshold:
+                t_events[i] = True
+                sp = 0
+            elif sn <= -self.cusum_threshold:
+                t_events[i] = True
+                sn = 0
+        if sum(t_events)/len(event) < 0.2 or sum(t_events)/len(event) > 0.5:
+            raise Warning(f"Num of signals over entire series : {sum(t_events)/len(event)}, it should be between 0.2 and 0.5, current cusum_threshold : {self.cusum_threshold}")
+        return t_events
+    
+class ClassifierWrapper(BaseEstimator,ClassifierMixin):
+    def __init__(self,signaler:Signaler,model,enable_sample_weight:bool,labeler:Labeler,feature_engineer:FeatureEngineer,sampling_dates=None) -> None:
+        self.signaler = signaler
+        self.model = model
+        self.sampling_dates = sampling_dates
+        self.enable_sample_weight = enable_sample_weight
+        self.labeler = labeler
+        self.test_labeler = copy.deepcopy(labeler)
+        self.feature_engineer = feature_engineer
     def fit(self,df,y=None):
         # print("Fit over date : ", df.index[0], " to ", df.index[-1])
         close = df.close.copy(deep=True)
         # Signal generation
         if self.sampling_dates is None:
             print("Warning : Only use this when first or not performing cross validation")
-            self.sampling_indices = get_cusum_events(close, self.cusum_threshold)
+            self.sampling_indices = self.signaler.get_event(df)
         else:
             if not isinstance(self.sampling_dates,pd.Index) or not isinstance(self.sampling_dates,pd.DatetimeIndex):
                 raise Exception("sampling_dates should be a pandas Index or a pandas DatetimeIndex")
             self.sampling_indices = close.index.searchsorted(self.sampling_dates[self.sampling_dates.isin(close.index)])
+        if len(self.sampling_indices) < MIN_NUM_SAMPLES:
+            raise Exception(f"Not enough samples after cusum sampling, {len(self.sampling_indices)} samples found, {MIN_NUM_SAMPLES} samples required")
         
         # labeling
-        self.labeler = Labeler(close,self.sampling_indices,self.ptsl_scalers,self.min_target,self.ewma_window,self.primary_model,self.num_days_exit)
-        self.labeler.fit()
-        if self.meta_labels is not None:
-            print("Warning : meta_labels is not None, performing MDA training.")
-            self.labeler.meta_labels = self.meta_labels
+        self.labeler.label(close,self.sampling_indices)
         y = self.labeler.meta_labels
-
+        if len(y) < MIN_NUM_SAMPLES:
+            raise Exception(f"Not enough samples after meta-labeling, {len(y)} samples found, {MIN_NUM_SAMPLES} samples required, Number of samples was {len(self.sampling_indices)} before meta-labeling")
         # feature engineering
-        # print("Samples wasted by labeling",len(sampling(df,self.sampling_indices))-len(sampling(df,self.sampling_indices).loc[y.index]))
-        self.sampled_df = sampling(df,self.sampling_indices).loc[y.index]
-        self.X_preprocessed = self.X_pipe.fit_transform(self.sampled_df)
+        self.X_preprocessed = self.feature_engineer.engineer(df,y,self.sampling_indices)
 
         # modeling
-        if self.sample_weight:
-            self.model.fit(self.X_preprocessed,y,sample_weight=get_sample_weights(self.labeler.first_touch_time,close))
-        else:
-            self.model.fit(self.X_preprocessed,y)
+        if self.enable_sample_weight: self.model.fit(self.X_preprocessed,y,sample_weight=get_sample_weights(self.labeler.first_touch_time,close))
+        else: self.model.fit(self.X_preprocessed,y)
         return self
     def preprocessed_before_predict(self,df):
         # print("Predict over date : ", df.index[0], " to ", df.index[-1])
@@ -58,18 +205,16 @@ class ClassifierWrapper(BaseEstimator,ClassifierMixin):
 
         # Signal generation
         self.test_sampling_indices = close.index.searchsorted(self.sampling_dates[self.sampling_dates.isin(close.index)])
+        
         # labeling
-        self.test_labeler = Labeler(close,self.test_sampling_indices,self.ptsl_scalers,self.min_target,self.ewma_window,self.primary_model,self.num_days_exit)
-        self.test_labeler.fit()
-        if self.test_meta_labels is not None:
-            print("Warning : meta_labels is not None, performing MDA prediction.")
-            self.test_labeler.meta_labels = self.test_meta_labels
+        self.test_labeler.label(close,self.test_sampling_indices)
         y = self.test_labeler.meta_labels
 
         # feature engineering
-        return self.X_pipe.transform(sampling(df,self.test_sampling_indices).loc[y.index])
+        return self.feature_engineer.engineer(df,y,self.test_sampling_indices)
     def predict(self,df):
         if self.sampling_dates is None:
+            print("sampling_dates not provided,since test data should be of the same sampling sequence of train data, test data is assumed to be the same as train data.")
             self.test_labeler = self.labeler
             X = self.X_preprocessed
         else:
@@ -179,59 +324,6 @@ class RSI:
     def __repr__(self):
         return f"RSI(rsi_period={self.rsi_period})"
         
-class Labeler(BaseEstimator,TransformerMixin):
-    def __init__(self,close:pd.Series,sampling_indices:pd.Index,ptsl_scalers:tuple[int,int],min_target:float,ewma_window:int,primary_model,num_days_exit:int) -> None:
-        self.close = close
-        self.sampling_indices = sampling_indices
-        self.ptsl_scalers = ptsl_scalers
-        self.min_target = min_target
-        self.ewma_window = ewma_window
-        self.primary_model = primary_model
-        self.num_days_exit = num_days_exit
-
-    def fit(self,X=None,y=None):
-        ## Primary Labeling
-
-        # Triple Barrier
-
-        vertical_barriers = self.close.index.searchsorted(self.close[self.sampling_indices].index)+self.num_days_exit
-        vertical_barriers[vertical_barriers>len(self.close.index)-1] = len(self.close.index)-1
-        vertical_barriers = self.close.index[vertical_barriers]
-        vertical_barriers = pd.Series(vertical_barriers,index=self.close[self.sampling_indices].index)
-
-        self.target = pd.Series(ewma_std_pct_change(self.close[self.sampling_indices].values,window=self.ewma_window),index=self.close[self.sampling_indices].index)
-
-        vertical_barriers__target__first_touch = get_events(
-            self.close,
-            pd.Series(self.close[self.sampling_indices].index,index=self.close[self.sampling_indices].index),
-            self.ptsl_scalers,
-            self.target,
-            self.min_target,
-            None,
-            vertical_barriers,
-            )
-        return__labels = get_labels(vertical_barriers__target__first_touch,self.close)
-        # Primary Model
-        self.side = self.primary_model.predict(self.close,self.sampling_indices)
-        # print(f"Primary Model long percentage : {len(side[side==1])/len(side)}")
-
-        ## Meta-Labeling
-        vertical_barriers__target__first_touch = get_events(
-            self.close,
-            pd.Series(self.close[self.sampling_indices].index,index=self.close[self.sampling_indices].index),
-            self.ptsl_scalers,
-            self.target,
-            self.min_target,
-            None,
-            pd.Series(vertical_barriers,index=self.close[self.sampling_indices].index),
-            side=self.side
-            )
-        self.first_touch_time = vertical_barriers__target__first_touch['first_touch_index']
-        actual_returns__meta_labels = get_labels(vertical_barriers__target__first_touch,self.close)
-        self.meta_labels = actual_returns__meta_labels['meta_label']
-        self.actual_returns = actual_returns__meta_labels['return']
-        return self
-    
 def get_score(wrapper,X,sharpe,commission_pct):
     allocations = wrapper.predict_proba(X)
     actual_returns = wrapper.test_labeler.actual_returns
@@ -239,28 +331,6 @@ def get_score(wrapper,X,sharpe,commission_pct):
         return ((actual_returns*allocations).mean()-commission_pct)/(actual_returns*allocations).std()
     return (actual_returns*allocations).mean()-commission_pct
 
-from sklearn.model_selection._split import _BaseKFold
-class PurgedKFold(_BaseKFold):
-    def __init__(self,n_splits:int=3,first_touch_time:pd.Series=None,pct_embargo:float=0.01) -> None:
-        super().__init__(n_splits, shuffle=False, random_state=None)
-        self.first_touch_time = first_touch_time
-        self.pct_embargo = pct_embargo
-    def split(self,X,y=None,groups=None):
-        if not isinstance(self.first_touch_time,pd.Series):
-            raise Exception("first_touch_time should be a pandas series")
-        if (X.index == self.first_touch_time.index).all():
-            pass
-        else:
-            raise Exception("X and first_touch_time should have the same index")
-        unit = int(len(X) / self.n_splits)
-        pivots = [i*unit for i in range(self.n_splits)] + [len(X)-1]
-        embargo = int(len(X) * self.pct_embargo)
-        for i in range(1,len(pivots)):
-            first_train_indices = X.index.searchsorted(self.first_touch_time[self.first_touch_time<=X.index[pivots[i-1]]].index)
-            second_train_indices = X.index.searchsorted(X.index[X.index.searchsorted(self.first_touch_time.iloc[pivots[i-1]:pivots[i]].max())+embargo:])
-            train_indices = np.concatenate((first_train_indices,second_train_indices),axis=0)
-            test_indices = X.index.searchsorted(X.index[pivots[i-1]:pivots[i]])
-            yield train_indices,test_indices
 
 
 def split_dictionary_list(arr:list[dict]):
@@ -298,7 +368,7 @@ class CustomCV:
         self.estimator.fit(df)
         self.cv.first_touch_time = self.estimator.labeler.first_touch_time.copy(deep=True)
         self.cv.first_touch_time = self.cv.first_touch_time.reindex(df.index,method="bfill").fillna(df.index[-1])
-        self.estimator.sampling_dates = df[self.estimator.sampling_indices].index
+        self.estimator.sampling_dates = df.iloc[self.estimator.sampling_indices].index
         self.params_scores = {}
         self.best_score_ = -100
         for params in self.params_grid:

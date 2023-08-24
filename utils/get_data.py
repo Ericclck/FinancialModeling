@@ -1,6 +1,5 @@
 import yfinance as yf
 import pandas as pd
-from utils.bars import get_events
 
 def store_ticker_data(ticker:str):
     t = yf.Ticker(ticker)
@@ -20,17 +19,6 @@ def store_ticker_data(ticker:str):
 
 def get_data(ticker:str) -> pd.Series:
     return pd.read_csv(f'data/{ticker}.csv', index_col="date", parse_dates=True)
-
-def get_filtered_data(ticker:str) -> tuple[pd.DataFrame,pd.Series]:
-    # import data
-    df = pd.read_csv(f'data/{ticker}.csv', index_col="date", parse_dates=True)
-
-    # get events
-    events = get_events(df['close'], 0.5)
-
-    df_filtered = df[events]
-
-    return df_filtered
 
 def get_updated_data(ticker:str) -> pd.Series:
     store_ticker_data(ticker)

@@ -2,33 +2,51 @@ from utils.custom_class import get_score
 import numpy as np
 import pandas as pd
 from sklearn.metrics import log_loss
+from utils.custom_class import *
+import matplotlib.pyplot as plt
 
-def MDA(estimator,df,cv):
+def MDI(estimator,df,sampling_cols,plot=True):
+    print("Performing MDI, make sure preprocessing preserve all columns.")
+    estimator.fit(df)
+    
+    out = [tree.feature_importances_ for tree in estimator.model.estimators_]
+
+    out = pd.DataFrame(out,index=range(estimator.model.n_estimators),columns=sampling_cols)
+    if plot:
+        means = out.mean(axis=0)
+        errors = out.std(axis=0)*(len(out)**-0.5)
+        plt.figure(figsize=(10, 5))
+        plt.title("MDI")
+        plt.barh(means.index, means.values, xerr=errors.values, align='center', alpha=0.6, ecolor='black', capsize=10)
+        plt.axvline(x=1/len(sampling_cols), color='r', linestyle='--')
+        plt.show()
+    return out
+
+def MDA(estimator,df,cv,sampling_cols,plot=True):
     estimator.fit(df)
     # lock first_touch_time for all estimators
     cv.first_touch_time = estimator.labeler.first_touch_time.copy(deep=True)
     cv.first_touch_time = cv.first_touch_time.reindex(df.index,method="bfill").fillna(df.index[-1])
     # lock sampling dates for all estimators
-    estimator.sampling_dates = df[estimator.sampling_indices].index
-    out = pd.DataFrame(index=range(cv.n_splits),columns=df.columns)
+    estimator.sampling_dates = df.iloc[estimator.sampling_indices].index
+    out = pd.DataFrame(index=range(cv.num_combinations),columns=[c for c in sampling_cols])
     for i,(train_indices,test_indices) in enumerate(cv.split(df)):
         estimator.fit(df.iloc[train_indices])
         prob = estimator.predict_proba(df.iloc[test_indices])
-        # record meta_labels for shuffled columns
-        estimator.meta_labels = estimator.labeler.meta_labels
-        estimator.test_meta_labels = estimator.test_labeler.meta_labels
-        # record true labels for shuffled columns
-        true_labels = estimator.test_labeler.meta_labels
-        base_score = -log_loss(true_labels,prob)
-        for col in df.columns:
-            df_copy = df.copy()
-            np.random.shuffle(df_copy[col].values)
-            estimator.fit(df_copy.iloc[train_indices])
-            prob = estimator.predict_proba(df_copy.iloc[test_indices])
-            score = -log_loss(true_labels,prob)
+        base_score = -log_loss(estimator.test_labeler.meta_labels,prob)
+        for col in sampling_cols:
+            estimator.feature_engineer.sampler.shuffle = col
+            estimator.fit(df.iloc[train_indices])
+            prob = estimator.predict_proba(df.iloc[test_indices])
+            score = -log_loss(estimator.test_labeler.meta_labels,prob)
             out.loc[i,col] = (score-base_score)/base_score
-        # reset meta_labels
-        estimator.meta_labels = None
-        estimator.test_meta_labels = None
+
+    if plot:
+        means = out.mean(axis=0)
+        errors = out.std(axis=0)*(len(out)**-0.5)
+        plt.figure(figsize=(10, 5))
+        plt.title("MDA (Score Improvement after shuffling)")
+        plt.barh(means.index, means.values, xerr=errors.values, align='center', alpha=0.6, ecolor='black', capsize=10)
+        plt.show()
     return out
         
