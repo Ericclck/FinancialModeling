@@ -68,6 +68,7 @@ Given that our sampling relies on the accumulation of balance, which is triggere
 This collective sentiment, triggered by the price change from the previous period, is then manifested in the price change of the current and potentially subsequent samples. The latter is the exact label that we are striving to forecast. This hypothesis, if validated, could provide valuable insights into the dynamics of price movements and the factors influencing them.
 
 I performed hyperparameter tuning with 40 iterations, these are the result:
+
 {'signaler__cusum_threshold': 0.02,
 'model': xgboost.XGBClassifier(min_child_weight=0.05,colsample_bytree=0.1,subsample=0.7),
 'model__learning_rate': 0.1,
@@ -120,10 +121,8 @@ The Financial Machine Learning pipeline presented here demonstrates a comprehens
 
 Tests performed with various financial datasets, including TLT price data, TMF data, BTC price data, and BTC net flow data, demonstrated the pipeline's capabilities in extracting meaningful information. However, these results also highlighted the challenges of overfitting and the necessity of robust methodologies to mitigate this risk.
 
-In the case of TLT and TMF data, the pipeline revealed instability and inconsistency, particularly in the results generated from MDI. This was also evident in the BTC price data and net flow data tests. However, the BTC tests also provided intriguing insights, such as the significance of 'open' prices as a consistent feature leading to score deduction after shuffling.
+In the case of TLT and TMF data, the pipeline revealed price data alone are not able to consistently generate profitable prediction in Combinatorial Purge K-Fold. However, filtering on BTC fundamental data provided intriguing insights, suggesting the impact of balance and net flow accumulation on price movements.
 
-Results from hyperparameter tuning demonstrated marginal and risky returns on daily frequency across all datasets tested. This indicates the need for further optimization and potentially the inclusion of more robust models to extract more valuable insights from the data.
+Results from hyperparameter tuning demonstrated marginal and risky returns on daily frequency across all datasets tested. This indicates the need for an increase in frequency for less variance or more fundamental data to extract alpha from these datasets.
 
 In conclusion, while the pipeline shows promise, it also illustrates that financial machine learning remains a complex field, where the balance between model complexity, overfitting, and the ability to extract meaningful insights is a constant challenge. Further improvements and testing will be crucial to enhance the pipeline's performance and make it a more reliable tool for financial data analysis.
-
-We hope that this repository will serve as a starting point for others interested in financial machine learning. The pipeline is open for customization, and we look forward to seeing how it can be further improved and adapted to meet various needs and challenges in the field of finance. Contributions, suggestions, and insights from the community are most welcome.
