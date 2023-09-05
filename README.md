@@ -115,6 +115,28 @@ Again,a very marginal and risky return on daily frequency.
 
 The pipeline is then trained on training data again with the best parameters (cross validation were performed with training data only) and tested on test data, the mean return is -0.00102 with 0.001 commission deducted.
 
+## Profits
+
+Previous tests uses a primary model of crossing_ma on close price series, to extract alpha from the market, a more reasonable model should be that based on fundamental data, such as net flow and balance.
+Let's see if the pipeline can extract alpha from the market with a primary model of crossing_ma on net flow and balance series.
+
+![Primary model based on netflow MDA](plots/BTC/netflow/MDA_netflow.png)
+![Primary model based on balance MDA](plots/BTC/balance/MDA_balance.png)
+
+Models are built on the important features based on MDA.
+Best parameters are:
+{'signaler': CumulativeSumSignaler(cusum_threshold=0.02, event_col='balance', is_pct=True), 'model': xgboost.XGBClassifier(min_child_weight=0.05,colsample_bytree=0.1,subsample=0.7), 'model__learning_rate': 0.3, 'model__n_estimators': 1000, 'model__max_depth': 10, 'feature_engineer__X_pipe__ImproveSkewness': Fracdiff(d=0.75, window=10), 'feature_engineer__X_pipe__DimensionReduction': None, 'labeler__primary_model': crossing_ma(fast_slow=(10, 20),col="net_flow"), 'labeler__min_target': 0.0005, 'labeler__ptsl_scalers': (3, 1), 'labeler__ewma_window': 10, 'enable_sample_weight': False, 'feature_engineer__sampler': EventSampler(cols=['open', 'high', 'low', 'net_flow'])}
+Which achieves an average return of more than 0.005 on daily frequency, 0.001 commission already deducted.
+Only 20 random iterations on my custom RandomizedSearchCV were performed, since more iterations might lead to overfitting.
+
+Even more surprising is that the average return is well over 0.01 on testing data, 0.001 commission already deducted, when the primary model is based on the above parameters.
+
+![Testing data results](plots/BTC/balance/stats.png)
+
+Note that the average trading days should be around 2 to 5 days, which is an arbitrary restriction I set on sampling frequency, so that the CUSUM filter is actually meaningful. It is based on the training data, so it should not be a problem.
+I maintain a high degree of "data hygiene" in this project, I stop tuning the model after I saw the results on testing data, so that the model is not overfitted to the training data.
+
+
 ## Conclusion
 
 The Financial Machine Learning pipeline presented here demonstrates a comprehensive, customizable approach to financial data analysis. The pipeline leverages advanced techniques such as Purged K-Fold Cross Validation, Combinatorial Purged K-Fold Cross Validation, and Feature Importance evaluation (MDI, MDA), providing a robust and flexible platform for financial machine learning tasks.
