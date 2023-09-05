@@ -136,7 +136,7 @@ The sharpe ratio is 0.04, a std of 0.02 is observed.
 ![Testing data results](plots/BTC/balance/stats.png)
 
 Note that the average trading days should be around 2 to 5 days, which is an arbitrary restriction I set on sampling frequency, so that the CUSUM filter is actually meaningful. It is based on the training data, so it should not be a problem.
-I maintain a high degree of "data hygiene" in this project, I stop tuning the model after I saw the results on testing data, so that the model is not overfitted to the training data.
+I maintain a high degree of "data hygiene" in this project, I stop tuning the model after I saw the results on testing data, so data mining is kept at a minimum.
 
 
 ## Conclusion
