@@ -118,6 +118,7 @@ The pipeline is then trained on training data again with the best parameters (cr
 ## Profits
 
 Previous tests uses a primary model of crossing_ma on close price series, to extract alpha from the market, a more reasonable model should be that based on fundamental data, such as net flow and balance.
+The logic being that net flow and balance count of Binance should correlates with bitcoin price.
 Let's see if the pipeline can extract alpha from the market with a primary model of crossing_ma on net flow and balance series.
 
 ![Primary model based on netflow MDA](plots/BTC/netflow/MDA_netflow.png)
@@ -129,7 +130,8 @@ Best parameters are:
 Which achieves an average return of more than 0.005 on daily frequency, 0.001 commission already deducted.
 Only 20 random iterations on my custom RandomizedSearchCV were performed, since more iterations might lead to overfitting.
 
-Even more surprising is that the average return is well over 0.01 on testing data, 0.001 commission already deducted, when the primary model is based on the above parameters.
+The Average return is over 0.001 on testing data, 0.001 commission already deducted, when the primary model is based on the above parameters.
+The sharpe ratio is 0.04, a std of 0.02 is observed.
 
 ![Testing data results](plots/BTC/balance/stats.png)
 
@@ -145,6 +147,7 @@ Tests performed with various financial datasets, including TLT price data, TMF d
 
 In the case of TLT and TMF data, the pipeline revealed price data alone are not able to consistently generate profitable prediction in Combinatorial Purge K-Fold. However, filtering on BTC fundamental data provided intriguing insights, suggesting the impact of balance and net flow accumulation on price movements.
 
-Results from hyperparameter tuning demonstrated marginal and risky returns on daily frequency across all datasets tested. This indicates the need for an increase in frequency for less variance or more fundamental data to extract alpha from these datasets.
+Results from model sampled with fundamental data, but with primary model based on price data, demonstrated the importance of a *logical* primary model.
+The return are promising, though the risk is still high, with a std of 0.02, and a sharpe ratio of 0.04.
 
-In conclusion, while the pipeline shows promise, it also illustrates that financial machine learning remains a complex field, where the balance between model complexity, overfitting, and the ability to extract meaningful insights is a constant challenge. Further improvements and testing will be crucial to enhance the pipeline's performance and make it a more reliable tool for financial data analysis.
+In conclusion, while the pipeline shows promise, it also illustrates that financial machine learning remains a complex field, where the balance between model complexity, overfitting, and the ability to extract meaningful insights is a constant challenge. Further improvement might be an ensemble of models based on different data sources and logical primary models built on those sources.
