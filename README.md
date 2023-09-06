@@ -136,7 +136,14 @@ The sharpe ratio is 0.04, a std of 0.02 is observed.
 ![Testing data results](plots/BTC/balance/stats.png)
 
 Note that the average trading days should be around 2 to 5 days, which is an arbitrary restriction I set on sampling frequency, so that the CUSUM filter is actually meaningful. It is based on the training data, so it should not be a problem.
-I maintain a high degree of "data hygiene" in this project, I stop tuning the model after I saw the results on testing data, so data mining is kept at a minimum.
+
+## Tuned by sharpe ratio
+
+![Testing data results](plots/BTC/balance/stat_sharpe.png)
+
+{'signaler': CumulativeSumSignaler(cusum_threshold=0.02, event_col='balance', is_pct=True), 'model': xgboost.XGBClassifier(min_child_weight=0.05,colsample_bytree=0.1,subsample=0.7), 'model__learning_rate': 0.1, 'model__n_estimators': 100, 'model__max_depth': 10, 'feature_engineer__X_pipe__ImproveSkewness': Fracdiff(d=0.75, window=10), 'feature_engineer__X_pipe__DimensionReduction': None, 'labeler__primary_model': crossing_ma(fast_slow=(20, 40),col="balance"), 'labeler__min_target': 0.0005, 'labeler__ptsl_scalers': (1, 3), 'labeler__ewma_window': 20, 'enable_sample_weight': False, 'feature_engineer__sampler': EventSampler(cols=['open', 'high', 'low', 'net_flow'])}
+
+The sharpe is over 0.17 and the average return is around 0.0047 on daily frequency, 0.001 commission already deducted.
 
 
 ## Conclusion
@@ -147,7 +154,7 @@ Tests performed with various financial datasets, including TLT price data, TMF d
 
 In the case of TLT and TMF data, the pipeline revealed price data alone are not able to consistently generate profitable prediction in Combinatorial Purge K-Fold. However, filtering on BTC fundamental data provided intriguing insights, suggesting the impact of balance and net flow accumulation on price movements.
 
-Results from model sampled with fundamental data, but with primary model based on price data, demonstrated the importance of a *logical* primary model.
-The return are promising, though the risk is still high, with a std of 0.02, and a sharpe ratio of 0.04.
+Results from model sampled with fundamental data, but with primary model based on price data, demonstrated the importance of a *logical* primary model and sharpe ratio as a metric for hyperparameter tuning.
+The return are promising, with mean return of 0.0047, though the risk is still high, with a sharpe ratio of only 0.17.
 
 In conclusion, while the pipeline shows promise, it also illustrates that financial machine learning remains a complex field, where the balance between model complexity, overfitting, and the ability to extract meaningful insights is a constant challenge. Further improvement might be an ensemble of models based on different data sources and logical primary models built on those sources.
