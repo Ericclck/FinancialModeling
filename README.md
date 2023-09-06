@@ -137,7 +137,7 @@ The sharpe ratio is 0.04, a std of 0.02 is observed.
 
 Note that the average trading days should be around 2 to 5 days, which is an arbitrary restriction I set on sampling frequency, so that the CUSUM filter is actually meaningful. It is based on the training data, so it should not be a problem.
 
-## Tuned by sharpe ratio
+## Hyper-parameters tuned by sharpe ratio
 
 ![Testing data results](plots/BTC/balance/stat_sharpe.png)
 
