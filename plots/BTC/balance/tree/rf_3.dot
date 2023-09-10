@@ -1,0 +1,33 @@
+digraph Tree {
+node [shape=box, style="filled, rounded", color="black", fontname="helvetica"] ;
+edge [fontname="helvetica"] ;
+0 [label="balance_1k_usd <= 9002.0\ngini = 0.5\nsamples = 121\nvalue = [86.5, 86.5]\nclass = Short", fillcolor="#ffffff"] ;
+1 [label="net_flow_native <= 233.99\ngini = 0.5\nsamples = 117\nvalue = [74.81, 84.59]\nclass = Long", fillcolor="#e8f4fc"] ;
+0 -> 1 [labeldistance=2.5, labelangle=45, headlabel="True"] ;
+2 [label="balance_1k_usd <= 2016.16\ngini = 0.14\nsamples = 34\nvalue = [2.34, 27.99]\nclass = Long", fillcolor="#4aa5e7"] ;
+1 -> 2 ;
+3 [label="gini = 0.0\nsamples = 25\nvalue = [0.0, 19.72]\nclass = Long", fillcolor="#399de5"] ;
+2 -> 3 ;
+4 [label="gini = 0.34\nsamples = 9\nvalue = [2.34, 8.27]\nclass = Long", fillcolor="#71b9ec"] ;
+2 -> 4 ;
+5 [label="close <= 462619.86\ngini = 0.49\nsamples = 83\nvalue = [72.47, 56.61]\nclass = Short", fillcolor="#f9e3d4"] ;
+1 -> 5 ;
+6 [label="balance_1k_usd <= 511.36\ngini = 0.48\nsamples = 71\nvalue = [67.8, 45.79]\nclass = Short", fillcolor="#f7d6bf"] ;
+5 -> 6 ;
+7 [label="balance_1k_native <= 987.06\ngini = 0.4\nsamples = 35\nvalue = [49.09, 18.44]\nclass = Short", fillcolor="#efb083"] ;
+6 -> 7 ;
+8 [label="gini = 0.27\nsamples = 24\nvalue = [49.09, 9.54]\nclass = Short", fillcolor="#ea995f"] ;
+7 -> 8 ;
+9 [label="gini = 0.0\nsamples = 11\nvalue = [0.0, 8.9]\nclass = Long", fillcolor="#399de5"] ;
+7 -> 9 ;
+10 [label="net_flow_native <= 903.47\ngini = 0.48\nsamples = 36\nvalue = [18.7, 27.35]\nclass = Long", fillcolor="#c0e0f7"] ;
+6 -> 10 ;
+11 [label="gini = 0.21\nsamples = 20\nvalue = [2.34, 17.17]\nclass = Long", fillcolor="#54aae9"] ;
+10 -> 11 ;
+12 [label="gini = 0.47\nsamples = 16\nvalue = [16.36, 10.18]\nclass = Short", fillcolor="#f5cfb4"] ;
+10 -> 12 ;
+13 [label="gini = 0.42\nsamples = 12\nvalue = [4.68, 10.81]\nclass = Long", fillcolor="#8fc7f0"] ;
+5 -> 13 ;
+14 [label="gini = 0.24\nsamples = 4\nvalue = [11.69, 1.91]\nclass = Short", fillcolor="#e99659"] ;
+0 -> 14 [labeldistance=2.5, labelangle=-45, headlabel="False"] ;
+}
