@@ -32,14 +32,13 @@ def MDA(estimator,df,cv,sampling_cols,plot=True):
     out = pd.DataFrame(index=range(cv.num_combinations),columns=[c for c in sampling_cols])
     for i,(train_indices,test_indices) in enumerate(cv.split(df)):
         estimator.fit(df.iloc[train_indices])
-        prob = estimator.predict_proba(df.iloc[test_indices])
-        base_score = -log_loss(estimator.test_labeler.meta_labels,prob)
+        base_score = get_score(estimator,df.iloc[test_indices],True,0.001)
         for col in sampling_cols:
             estimator.feature_engineer.sampler.shuffle = col
             estimator.fit(df.iloc[train_indices])
-            prob = estimator.predict_proba(df.iloc[test_indices])
-            score = -log_loss(estimator.test_labeler.meta_labels,prob)
+            score = get_score(estimator,df.iloc[test_indices],True,0.001)
             out.loc[i,col] = (score-base_score)/base_score
+            estimator.feature_engineer.sampler.shuffle = None
 
     if plot:
         means = out.mean(axis=0)

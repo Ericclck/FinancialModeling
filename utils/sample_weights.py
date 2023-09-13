@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 def get_concurrency(price_indices: pd.Index, first_touch : pd.Series, molecule : pd.Series = None) -> pd.Series:
     """
@@ -135,8 +136,9 @@ def get_uniqueness_decay(uniqueness : pd.Series, c : float) -> pd.Series:
     return y
 
 def get_time_decay_sample_weights(first_touch : pd.Series, prices : pd.Series,c : float, molecule : pd.Series = None):
-    concurrency = get_concurrency(prices.index,first_touch,molecule)
-    weights = get_sample_weights(first_touch, concurrency, prices, molecule)
+    weights = get_sample_weights(first_touch, prices, molecule)
     weights = weights*get_uniqueness_decay(weights,c)
     weights = weights/weights.sum()
+    weights.plot(title="3 Factors Sample Weights",figsize=(10,5))
+    plt.show()
     return weights
