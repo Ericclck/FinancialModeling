@@ -37,4 +37,4 @@ MDA is also modified in a similar manner. Hyperparameter tuning is now fully aut
 
 ## Details of data science and strategy built with this pipeline
 
-In my personal website : https://www.ericclck.com/
+In my personal website : https://www.ericclck.com
