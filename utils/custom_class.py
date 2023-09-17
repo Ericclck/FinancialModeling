@@ -287,9 +287,10 @@ class AllSignaler(Signaler):
     def get_event(self,df:pd.DataFrame) -> np.ndarray:
         return np.ones(len(df),dtype=np.bool)
 class CumulativeSumSignaler(Signaler):
-    def __init__(self,cusum_threshold:float=None,event_col:str="close") -> None:
+    def __init__(self,cusum_threshold:float=None,event_col:str="close",signal_bounds:tuple[float]=(0.2,0.5)) -> None:
         self.cusum_threshold = cusum_threshold
         self.event_col = event_col
+        self.signal_bounds = signal_bounds
     def get_event(self,df:pd.DataFrame) -> np.ndarray:
         event = df[self.event_col].copy(deep=True)
         fd = FracdiffStat()
@@ -306,8 +307,8 @@ class CumulativeSumSignaler(Signaler):
             elif sn <= -self.cusum_threshold:
                 t_events[i] = True
                 sn = 0
-        if sum(t_events)/len(event) < 0.2 or sum(t_events)/len(event) > 0.5:
-            raise Warning(f"Num of signals over entire series : {sum(t_events)/len(event)}, it should be between 0.2 and 0.5, current cusum_threshold : {self.cusum_threshold}")
+        if sum(t_events)/len(event) < self.signal_bounds[0] or sum(t_events)/len(event) > self.signal_bounds[1]:
+            raise Warning(f"Num of signals over entire series : {sum(t_events)/len(event)}, it should be between {self.signal_bounds[0]} and {self.signal_bounds[1]}, current cusum_threshold : {self.cusum_threshold}")
         return t_events
     
 class ClassifierWrapper(BaseEstimator,ClassifierMixin):

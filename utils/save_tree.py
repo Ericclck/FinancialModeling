@@ -59,7 +59,7 @@ def save_trees(wrapper, folder_path):
 def save_one_tree(model,folder_path,features):
     export_graphviz(model, out_file=f'{folder_path}primary_model.dot', 
                         feature_names=features,
-                        class_names=["Short","Long"],
+                        # class_names=["Short","Long"],
                         rounded=True,
                         proportion=False, 
                         precision=2, 

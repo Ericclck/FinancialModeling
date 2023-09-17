@@ -139,6 +139,6 @@ def get_time_decay_sample_weights(first_touch : pd.Series, prices : pd.Series,c 
     weights = get_sample_weights(first_touch, prices, molecule)
     weights = weights*get_uniqueness_decay(weights,c)
     weights = weights/weights.sum()
-    weights.plot(title="3 Factors Sample Weights",figsize=(10,5))
-    plt.show()
+    # weights.plot(title="3 Factors Sample Weights",figsize=(10,5))
+    # plt.show()
     return weights

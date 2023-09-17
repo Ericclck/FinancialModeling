@@ -5,6 +5,7 @@ test.py
 tempCodeRunnerFile.py
 CV_SPY.py
 CV_TLT.py
+data.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
