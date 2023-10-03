@@ -3,9 +3,13 @@ prediction.py
 data/
 test.py
 tempCodeRunnerFile.py
-CV_SPY.py
+CV_forex.py
 CV_TLT.py
+CV_CRM.py
 data_download.py
+data_download_alpha_vintage.py
+plots/CRM
+utils/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
